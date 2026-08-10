@@ -167,17 +167,18 @@ Cppcheck is used to determine whether the patched code still contains relevant i
 
 The application then reports whether the remediation was successfully verified.
 
-🛠️ Tech Stack
-Component	Technology
-Frontend / UI	Streamlit
-Programming Language	Python
-ML Model	CodeBERT
-ML Framework	Hugging Face Transformers
-Security Analysis	Flawfinder
-Static Analysis	Cppcheck
-LLM Runtime	Ollama
-LLM	Llama 3.2 3B
-Target Languages	C / C++
+| Component | Technology |
+|---|---|
+| Frontend / UI | Streamlit |
+| Programming Language | Python |
+| ML Model | CodeBERT |
+| ML Framework | Hugging Face Transformers |
+| Security Analysis | Flawfinder |
+| Static Analysis | Cppcheck |
+| LLM Runtime | Ollama |
+| LLM | Llama 3.2 3B |
+| Target Languages | C / C++ |
+
 📁 Project Structure
 vulnscan/
 │
@@ -294,15 +295,24 @@ Llama 3.2 3B
        │
        ▼
 Verification Result
-🖥️ Screenshots
-Dashboard
 
-Vulnerability Explanation
+# 🖥️ Screenshots
 
-Patched Code
+## Dashboard
 
-Verification
+![VulnScan Dashboard](docs/dashboard.png)
 
+## Vulnerability Explanation
+
+![Vulnerability Explanation](docs/Explanation.png)
+
+## Patched Code
+
+![Patched Code](docs/patched.png)
+
+## Verification
+
+![Verification Result](docs/verification.png)
 🔐 Example Detection
 
 For a vulnerable buffer-handling program, VulnScan can identify security issues associated with unsafe memory operations.
