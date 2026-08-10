@@ -24,6 +24,42 @@ The system combines **CodeBERT-based vulnerability classification**, **Flawfinde
 
 ---
 
+## 🚀 Live Demo
+
+**[Try VulnScan Live](https://vulnscan-6dqwmexccvc3u7qln7kgmu.streamlit.app/)**
+
+The deployed portfolio demo provides:
+
+- CodeBERT vulnerability detection
+- Flawfinder static analysis
+- Cppcheck static analysis
+- CWE identification
+- Vulnerability assessment dashboard
+- Patch-generation status and verification reporting
+
+> **Cloud Demo Limitation:** AI patch generation uses Ollama with Llama 3.2 3B locally. Ollama is not available in the Streamlit Cloud environment, so AI patch generation and patch verification are skipped in the public demo when no patched code is generated.
+
+### Local Full Pipeline
+
+For the complete VulnScan experience, run the project locally with Ollama:
+
+```text
+C/C++ Source
+      ↓
+CodeBERT Detection
+      ↓
+Flawfinder + Cppcheck
+      ↓
+CWE Identification
+      ↓
+Llama 3.2 3B via Ollama
+      ↓
+AI-Generated Patch
+      ↓
+Cppcheck Verification
+
+```
+
 ## 🏗️ System Architecture
 
 VulnScan follows a multi-stage detection and remediation pipeline:
