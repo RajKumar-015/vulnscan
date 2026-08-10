@@ -84,6 +84,7 @@ VulnScan follows a multi-stage detection and remediation pipeline:
                      │ + Patch + Report     │
                      └─────────────────────┘
 ```
+
 🔄 Pipeline
 1. Input
 
@@ -167,6 +168,7 @@ Cppcheck is used to determine whether the patched code still contains relevant i
 
 The application then reports whether the remediation was successfully verified.
 
+
 # 🛠️ Tech Stack
 
 | Component | Technology |
@@ -180,6 +182,7 @@ The application then reports whether the remediation was successfully verified.
 | LLM Runtime | Ollama |
 | LLM | Llama 3.2 3B |
 | Target Languages | C / C++ |
+
 
 📁 Project Structure
 vulnscan/
@@ -204,6 +207,7 @@ vulnscan/
 ├── LICENSE
 ├── .gitignore
 └── README.md
+
 🚀 Installation
 1. Clone the repository
 git clone https://github.com/RajKumar-015/vulnscan.git
@@ -315,6 +319,7 @@ Verification Result
 ## Verification
 
 ![Verification Result](docs/verification.png)
+
 🔐 Example Detection
 
 For a vulnerable buffer-handling program, VulnScan can identify security issues associated with unsafe memory operations.
@@ -359,6 +364,7 @@ Benchmark-based evaluation
 Multi-file project analysis
 Automated test generation for generated patches
 More comprehensive C/C++ security datasets
+
 📌 Project Goals
 
 VulnScan explores how machine learning, static analysis, and local LLMs can work together to automate parts of the vulnerability remediation workflow.
@@ -367,7 +373,7 @@ Rather than relying on a single detection technique, the system combines multipl
 
 👨‍💻 Author
 
-Raj Kumar
+J RajKumar
 
 CSE Student | Software Development | Security & AI
 
