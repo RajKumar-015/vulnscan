@@ -375,9 +375,15 @@ if analyze_clicked:
         prompt = build_prompt(code, detection['cwes'], detection['flawfinder'])
         patch = patch_code(prompt)
 
-    # Stage 4 — Verify
-    with st.spinner("Running Cppcheck automated patch verification..."):
-        verification = verify_patch(patch['patched_code'], detection['cwes'])
+    # Stage 4 — Verify only when an actual patch was generated.
+    if patch.get('patched_code', '').strip():
+        with st.spinner("Running Cppcheck automated patch verification..."):
+            verification = verify_patch(patch['patched_code'], detection['cwes'])
+    else:
+        verification = {
+            "status": "SKIPPED",
+            "remaining_issues": []
+        }
 
     # ─── Detailed Results Tabs ─────────────────────────────
     st.subheader("📋 Remediation & Verification Breakdown")
@@ -401,13 +407,16 @@ if analyze_clicked:
 
         with col_right:
             st.markdown("#### Secure Patched Code")
-            # Show patched code; fallback to changes if missing
-            code_text = patch.get('patched_code') or patch.get('changes')
+            # Display only actual patched source code.
+            code_text = patch.get('patched_code', '').strip()
             if code_text:
                 clean_code = code_text.replace("```c", "").replace("```", "").strip()
                 st.code(clean_code, language="c", line_numbers=True)
             else:
-                st.warning("Patched code block not returned.")
+                st.warning(
+                    "AI patching is unavailable in this deployment. "
+                    "Run VulnScan locally with Ollama + Llama 3.2 3B to generate a secure patch."
+                )
 
         st.markdown("---")
         st.markdown("#### Summary of Remediation Changes")
@@ -418,7 +427,23 @@ if analyze_clicked:
 
     with tab3:
         st.markdown("#### Automated Verification Engine")
-        if "PASSED" in verification['status']:
+        if verification['status'] == "SKIPPED":
+            st.markdown("""
+            <div style="
+                background: #2a2110;
+                border: 1px solid #854d0e;
+                border-left: 4px solid #f59e0b;
+                border-radius: 6px;
+                padding: 14px 18px;
+                color: #fde68a;
+                font-weight: 600;
+                margin-bottom: 1rem;
+            ">
+                ⏭️ Patch Verification SKIPPED — No patch was generated.
+                Ollama + Llama 3.2 3B is unavailable in the cloud demo.
+            </div>
+            """, unsafe_allow_html=True)
+        elif "PASSED" in verification['status']:
             st.markdown("""
             <div class="verify-success">
                 ✅ Patch Verification PASSED — Identified CWE vulnerabilities resolved successfully.
@@ -435,6 +460,8 @@ if analyze_clicked:
             st.markdown("**Static Analysis Notes & Warnings:**")
             for issue in verification['remaining_issues']:
                 st.code(issue, language="text")
+        elif verification['status'] == "SKIPPED":
+            st.caption("Verification was not run because no patched source code was generated.")
         else:
             st.caption("No remaining warnings or issues reported by Cppcheck.")
 
