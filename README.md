@@ -12,7 +12,7 @@ The system combines **CodeBERT-based vulnerability classification**, **Flawfinde
 
 - 🔍 **ML-based vulnerability detection** using CodeBERT
 - 🛡️ **Static security analysis** with Flawfinder
-- 🔎 **AST-based static analysis** with Cppcheck
+- 🔎 **Static analysis** with Cppcheck
 - 🧠 **Hybrid vulnerability decision** combining ML and static-analysis evidence
 - 🏷️ **CWE identification** from static-analysis findings
 - 🤖 **Local LLM-based patch generation** using Llama 3.2 3B
@@ -24,108 +24,116 @@ The system combines **CodeBERT-based vulnerability classification**, **Flawfinde
 
 ---
 
-# 🏗️ System Architecture
+## 🏗️ System Architecture
 
 VulnScan follows a multi-stage detection and remediation pipeline:
 
 ```text
-                     ┌─────────────────────┐
-                     │   C / C++ Source    │
-                     │ Upload or Paste Code │
-                     └──────────┬──────────┘
-                                │
-                                ▼
-                     ┌─────────────────────┐
-                     │      CodeBERT        │
-                     │ Vulnerability Model  │
-                     └──────────┬──────────┘
-                                │
-                                ▼
-              ┌──────────────────────────────────┐
-              │        Static Analysis            │
-              │                                  │
-              │   Flawfinder + Cppcheck          │
-              └────────────────┬─────────────────┘
-                               │
-                               ▼
-                     ┌─────────────────────┐
-                     │  Hybrid Decision    │
-                     │  + CWE Extraction   │
-                     └──────────┬──────────┘
-                                │
-                         Vulnerability?
-                                │
-                                ▼
-                     ┌─────────────────────┐
-                     │   Prompt Builder    │
-                     │ Structured Context  │
-                     └──────────┬──────────┘
-                                │
-                                ▼
-                     ┌─────────────────────┐
-                     │   Llama 3.2 3B      │
-                     │      Ollama          │
-                     └──────────┬──────────┘
-                                │
-                                ▼
-                     ┌─────────────────────┐
-                     │   Generated Patch   │
-                     └──────────┬──────────┘
-                                │
-                                ▼
-                     ┌─────────────────────┐
-                     │  Patch Verification │
-                     │      Cppcheck       │
-                     └──────────┬──────────┘
-                                │
-                                ▼
-                     ┌─────────────────────┐
-                     │ Security Assessment │
-                     │ + Patch + Report     │
-                     └─────────────────────┘
+┌──────────────────────┐
+│    C / C++ Source    │
+│  Upload or Paste     │
+└──────────┬───────────┘
+           │
+           ▼
+┌──────────────────────┐
+│       CodeBERT       │
+│ Vulnerability Model  │
+└──────────┬───────────┘
+           │
+           ▼
+┌──────────────────────────────┐
+│       Static Analysis        │
+│                              │
+│   Flawfinder + Cppcheck      │
+└─────────────┬────────────────┘
+              │
+              ▼
+┌──────────────────────┐
+│   Hybrid Decision    │
+│   + CWE Extraction   │
+└──────────┬───────────┘
+           │
+           ▼
+┌──────────────────────┐
+│    Prompt Builder    │
+│  Structured Context  │
+└──────────┬───────────┘
+           │
+           ▼
+┌──────────────────────┐
+│     Llama 3.2 3B     │
+│       Ollama         │
+└──────────┬───────────┘
+           │
+           ▼
+┌──────────────────────┐
+│    Generated Patch   │
+└──────────┬───────────┘
+           │
+           ▼
+┌──────────────────────┐
+│  Patch Verification  │
+│      Cppcheck        │
+└──────────┬───────────┘
+           │
+           ▼
+┌──────────────────────┐
+│ Security Assessment  │
+│   + Patch + Report   │
+└──────────────────────┘
 ```
 
-🔄 Pipeline
-1. Input
+---
+
+## 🔄 How It Works
+
+### 1. Input
 
 Users can either:
 
-Upload a C/C++ source file
-Paste source code directly into the interface
+- Upload a C/C++ source file
+- Paste source code directly into the interface
 
-Supported extensions include:
+Supported extensions:
 
+```text
 .c
 .cpp
 .h
-2. ML Vulnerability Detection
+```
+
+### 2. ML Vulnerability Detection
 
 CodeBERT analyzes the source code and predicts whether it contains insecure code.
 
 The project uses:
 
+```text
 mrm8488/codebert-base-finetuned-detect-insecure-code
+```
 
 The model provides:
 
-Vulnerability classification
-Confidence score
-3. Static Analysis
+- Vulnerability classification
+- Confidence score
 
-Two complementary static-analysis tools are used:
+### 3. Static Analysis
 
-Flawfinder
+VulnScan uses two complementary static-analysis tools.
+
+**Flawfinder**
 
 Detects potentially dangerous C/C++ functions and security-sensitive patterns.
 
-Cppcheck
+**Cppcheck**
 
-Performs deeper static analysis and identifies potential programming and security issues.
+Performs static analysis and identifies potential programming and security issues.
 
-4. Hybrid Decision
+### 4. Hybrid Vulnerability Decision
 
-VulnScan combines:
+VulnScan combines evidence from multiple detection sources:
 
+```text
 CodeBERT Prediction
         +
 Flawfinder Findings
@@ -133,43 +141,51 @@ Flawfinder Findings
 Cppcheck Findings
         ↓
 Hybrid Security Decision
+```
 
 This provides additional evidence instead of relying solely on the ML model.
 
-5. CWE Identification
+### 5. CWE Identification
 
-Static-analysis findings are processed to identify relevant CWE categories associated with the detected vulnerability.
+Static-analysis findings are processed to identify relevant CWE categories associated with detected vulnerabilities.
 
 Example:
 
+```text
 CWE-119
 CWE-120
 CWE-20
-6. AI-Assisted Patching
+```
+
+### 6. AI-Assisted Patching
 
 When a vulnerability is confirmed, VulnScan constructs a structured remediation prompt containing the relevant source code and security findings.
 
-The prompt is sent to:
+The prompt is sent through:
 
+```text
 Ollama
    ↓
 Llama 3.2 3B
+```
 
 The model generates:
 
-Vulnerability explanation
-Patched source code
-Description of changes
-7. Patch Verification
+- Vulnerability explanation
+- Patched source code
+- Description of changes
+
+### 7. Patch Verification
 
 The generated patch is passed through the verification stage.
 
-Cppcheck is used to determine whether the patched code still contains relevant issues.
+Cppcheck is used to check the patched source for remaining relevant issues.
 
-The application then reports whether the remediation was successfully verified.
+The application then reports the resulting remediation status.
 
+---
 
-# 🛠️ Tech Stack
+## 🛠️ Tech Stack
 
 | Component | Technology |
 |---|---|
@@ -183,16 +199,19 @@ The application then reports whether the remediation was successfully verified.
 | LLM | Llama 3.2 3B |
 | Target Languages | C / C++ |
 
+---
 
-📁 Project Structure
+## 📁 Project Structure
+
+```text
 vulnscan/
 │
-├── app.py                 # Streamlit application
-├── main.py                # Main pipeline entry point
-├── detector.py            # ML + static-analysis detection
-├── prompt_builder.py      # LLM prompt construction
-├── patcher.py             # LLM patch generation and extraction
-├── verifier.py            # Patch verification
+├── app.py
+├── main.py
+├── detector.py
+├── prompt_builder.py
+├── patcher.py
+├── verifier.py
 │
 ├── samples/
 │   └── vulnerable_buffer.c
@@ -207,72 +226,118 @@ vulnscan/
 ├── LICENSE
 ├── .gitignore
 └── README.md
+```
 
-🚀 Installation
-1. Clone the repository
+---
+
+## 🚀 Installation
+
+### 1. Clone the repository
+
+```bash
 git clone https://github.com/RajKumar-015/vulnscan.git
 cd vulnscan
-2. Create a virtual environment
-Windows
+```
+
+### 2. Create a virtual environment
+
+#### Windows
+
+```bash
 python -m venv .venv
 .venv\Scripts\activate
-macOS / Linux
+```
+
+#### macOS / Linux
+
+```bash
 python3 -m venv .venv
 source .venv/bin/activate
-3. Install Python dependencies
+```
+
+### 3. Install Python dependencies
+
+```bash
 pip install -r requirements.txt
-🔧 System Dependencies
+```
 
-VulnScan requires the following tools:
+---
 
-Python 3.10+
-Flawfinder
-Cppcheck
-Ollama
+## 🔧 System Dependencies
+
+VulnScan requires:
+
+- Python 3.10+
+- Flawfinder
+- Cppcheck
+- Ollama
 
 Verify the installations:
 
+```bash
 flawfinder --version
 cppcheck --version
 ollama --version
-🤖 Setup Llama 3.2 3B
+```
+
+---
+
+## 🤖 Setup Llama 3.2 3B
 
 Install Ollama and download the required model:
 
+```bash
 ollama pull llama3.2:3b
+```
 
-Make sure Ollama is running before starting an analysis that requires LLM patch generation.
+Make sure Ollama is running before using the LLM patching stage.
 
-▶️ Run VulnScan
+---
+
+## ▶️ Run VulnScan
 
 Start the Streamlit application:
 
+```bash
 streamlit run app.py
+```
 
-Streamlit will provide a local URL, normally:
+Streamlit will display a local URL, normally:
 
+```text
 http://localhost:8501
+```
 
-Open the URL in your browser.
+Open that URL in your browser.
 
-🧪 Test With the Included Sample
+---
 
-A vulnerable C program is included:
+## 🧪 Test With the Included Sample
 
+A vulnerable C program is included at:
+
+```text
 samples/vulnerable_buffer.c
+```
 
 The sample demonstrates unsafe input handling involving functions such as:
 
+```c
 gets()
 strcpy()
+```
 
-Upload the sample through the VulnScan interface and select:
+Upload the file through the VulnScan interface and select:
 
-Analyze & Patch Vulnerabilities
+**Analyze & Patch Vulnerabilities**
 
-The application will execute the detection and remediation pipeline.
+The application then executes the complete detection and remediation pipeline.
 
-📊 Example Workflow
+---
+
+## 📊 Example Workflow
+
+```text
 Vulnerable C Code
        │
        ▼
@@ -285,47 +350,53 @@ Flawfinder + Cppcheck
 Hybrid Vulnerability Decision
        │
        ▼
-    CWE IDs
+     CWE IDs
        │
        ▼
-Prompt Builder
+ Prompt Builder
        │
        ▼
-Llama 3.2 3B
+  Llama 3.2 3B
        │
        ▼
-   Patched Code
+  Patched Code
        │
        ▼
-   Cppcheck
+    Cppcheck
        │
        ▼
 Verification Result
+```
 
-# 🖥️ Screenshots
+---
 
-## Dashboard
+## 🖥️ Screenshots
+
+### Dashboard
 
 ![VulnScan Dashboard](docs/dashboard.png)
 
-## Vulnerability Explanation
+### Vulnerability Explanation
 
 ![Vulnerability Explanation](docs/Explanation.png)
 
-## Patched Code
+### Patched Code
 
 ![Patched Code](docs/patched.png)
 
-## Verification
+### Verification
 
 ![Verification Result](docs/verification.png)
 
-🔐 Example Detection
+---
+
+## 🔐 Example Detection
 
 For a vulnerable buffer-handling program, VulnScan can identify security issues associated with unsafe memory operations.
 
-Example output:
+Example result:
 
+```text
 Security Decision:
 CONFIRMED VULNERABLE
 
@@ -336,47 +407,59 @@ Detected CWEs:
 CWE-119
 CWE-120
 CWE-20
+```
 
 The remediation stage then generates a candidate secure implementation and sends it through the verification stage.
 
-⚠️ Limitations
+---
+
+## ⚠️ Limitations
 
 VulnScan is intended as a security research and engineering project rather than a replacement for professional security auditing.
 
 Current limitations include:
 
-Detection depends on the capabilities of the underlying ML and static-analysis tools.
-LLM-generated patches are candidate remediations and should be reviewed before production use.
-Patch verification currently relies primarily on Cppcheck-based validation.
-LLM inference performance depends on the available local hardware.
-CWE mapping is currently based on available static-analysis evidence.
-🔮 Future Improvements
+- Detection depends on the capabilities of the underlying ML and static-analysis tools.
+- LLM-generated patches are candidate remediations and should be reviewed before production use.
+- Patch verification currently relies primarily on Cppcheck-based validation.
+- LLM inference performance depends on available local hardware.
+- CWE mapping is currently based on available static-analysis evidence.
+
+---
+
+## 🔮 Future Improvements
 
 Potential future improvements include:
 
-AST-based vulnerability localization
-More comprehensive CWE mapping
-Compiler-based patch validation
-Automated regression testing
-Patch diff generation
-Expanded vulnerability classes
-Benchmark-based evaluation
-Multi-file project analysis
-Automated test generation for generated patches
-More comprehensive C/C++ security datasets
+- AST-based vulnerability localization
+- More comprehensive CWE mapping
+- Compiler-based patch validation
+- Automated regression testing
+- Patch diff generation
+- Expanded vulnerability classes
+- Benchmark-based evaluation
+- Multi-file project analysis
+- Automated test generation for generated patches
+- More comprehensive C/C++ security datasets
 
-📌 Project Goals
+---
 
-VulnScan explores how machine learning, static analysis, and local LLMs can work together to automate parts of the vulnerability remediation workflow.
+## 🎯 Project Goal
+
+VulnScan explores how **machine learning, static analysis, and local LLMs can work together to automate parts of the vulnerability remediation workflow**.
 
 Rather than relying on a single detection technique, the system combines multiple sources of evidence before generating and verifying a remediation.
 
-👨‍💻 Author
+---
 
-J RajKumar
+## 👨‍💻 Author
+
+**Raj Kumar**
 
 CSE Student | Software Development | Security & AI
 
-📄 License
+---
+
+## 📄 License
 
 This project is licensed under the MIT License.
