@@ -83,6 +83,7 @@ VulnScan follows a multi-stage detection and remediation pipeline:
                      │ Security Assessment │
                      │ + Patch + Report     │
                      └─────────────────────┘
+```
 🔄 Pipeline
 1. Input
 
