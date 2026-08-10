@@ -167,6 +167,8 @@ Cppcheck is used to determine whether the patched code still contains relevant i
 
 The application then reports whether the remediation was successfully verified.
 
+# 🛠️ Tech Stack
+
 | Component | Technology |
 |---|---|
 | Frontend / UI | Streamlit |
