@@ -5,6 +5,7 @@ from detector import detect
 from prompt_builder import build_prompt
 from patcher import patch_code
 from verifier import verify_patch
+from validator import validate_ml_suspect
 
 # ─── Page Config ───────────────────────────────────────────
 st.set_page_config(
@@ -228,7 +229,7 @@ st.markdown("""
     <div class="pipeline-step">
         <div class="pipeline-step-num">Stage 2</div>
         <div class="pipeline-step-title">ML Detection</div>
-        <div class="pipeline-step-tech">CodeBERT Classifier</div>
+        <div class="pipeline-step-tech">CodeBERT</div>
     </div>
     <div class="pipeline-step">
         <div class="pipeline-step-num">Stage 3</div>
@@ -237,13 +238,13 @@ st.markdown("""
     </div>
     <div class="pipeline-step">
         <div class="pipeline-step-num">Stage 4</div>
-        <div class="pipeline-step-title">AI Patching</div>
+        <div class="pipeline-step-title">ML Validation</div>
         <div class="pipeline-step-tech">Llama 3.2 (3B)</div>
     </div>
     <div class="pipeline-step">
         <div class="pipeline-step-num">Stage 5</div>
-        <div class="pipeline-step-title">Remediation Check</div>
-        <div class="pipeline-step-tech">Cppcheck Verification</div>
+        <div class="pipeline-step-title">AI Patching</div>
+        <div class="pipeline-step-tech">Llama 3.2 (3B)</div>
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -290,6 +291,7 @@ else:
     )
 
 # ─── Action Button ─────────────────────────────────────────
+# ─── Action Button ─────────────────────────────────────────
 analyze_clicked = st.button(
     "🔍 Analyze & Patch Vulnerabilities",
     type="primary",
@@ -298,20 +300,60 @@ analyze_clicked = st.button(
 )
 
 if analyze_clicked:
-
     st.markdown("---")
 
-    # Stage 1 — Detection
+    # Stage 1 — Independent ML + static detection
     with st.spinner("Executing hybrid detection pipeline (CodeBERT + Flawfinder + Cppcheck)..."):
         detection = detect(code)
+
+    validation = {
+        "available": False,
+        "verdict": "NOT_REQUIRED",
+        "cwe": "NONE",
+        "reason": "",
+        "evidence": "",
+        "raw_response": "",
+        "error": "",
+    }
+
+    # Stage 2 — Secondary validation ONLY for ML-only detections.
+    # This is the path that preserves the project's ML value when static
+    # analysis misses a vulnerability, while preventing obvious false
+    # positives such as Hello World from being patched.
+    if detection["decision"] == "ML-SUSPECTED":
+        with st.spinner("🧠 Validating ML-only suspicion with semantic security analysis..."):
+            validation = validate_ml_suspect(code)
+
+        if validation["verdict"] == "CONFIRMED" and validation.get("cwe") not in (None, "", "NONE"):
+            if validation["cwe"] not in detection["cwes"]:
+                detection["cwes"].append(validation["cwe"])
+            detection["decision"] = "CONFIRMED VULNERABLE"
+            detection["confidence"] = "MEDIUM"
+            detection["decision_reason"] = (
+                "CodeBERT detected the issue and secondary semantic validation "
+                f"confirmed a concrete security weakness ({validation['cwe']})."
+            )
+        elif validation["verdict"] == "FALSE_POSITIVE":
+            detection["decision"] = "SAFE"
+            detection["confidence"] = "HIGH"
+            detection["decision_reason"] = (
+                "CodeBERT flagged the code, but secondary validation determined "
+                "that the ML signal was a false positive."
+            )
 
     # ─── Metrics Dashboard ───
     st.subheader("📊 Vulnerability Assessment Summary")
 
     col1, col2, col3, col4 = st.columns(4)
 
-    status_color = "#ef4444" if "VULNERABLE" in detection['decision'] else "#10b981"
-    cb_label = detection['codebert']['label']
+    if detection["decision"] == "SAFE":
+        status_color = "#10b981"
+    elif detection["decision"] == "ML-SUSPECTED":
+        status_color = "#f59e0b"
+    else:
+        status_color = "#ef4444"
+
+    cb_label = detection["codebert"]["label"]
     cb_score = f"{detection['codebert']['score']*100:.1f}%"
 
     with col1:
@@ -337,7 +379,7 @@ if analyze_clicked:
         <div class="metric-card">
             <div class="metric-label">Flawfinder Issues</div>
             <div class="metric-value">{len(detection['flawfinder'])}</div>
-            <div class="metric-sub">Static pattern triggers</div>
+            <div class="metric-sub">Static security analysis</div>
         </div>
         """, unsafe_allow_html=True)
 
@@ -346,88 +388,241 @@ if analyze_clicked:
         <div class="metric-card">
             <div class="metric-label">Cppcheck Issues</div>
             <div class="metric-value">{len(detection['cppcheck'])}</div>
-            <div class="metric-sub">AST static analysis</div>
+            <div class="metric-sub">Static analysis</div>
         </div>
         """, unsafe_allow_html=True)
 
-    # Decision Banner
-    if detection['decision'] == "SAFE":
-        st.markdown("""
+    # Decision banner
+    if detection["decision"] == "SAFE":
+        st.markdown(f"""
         <div class="banner-safe">
             <div class="banner-title" style="color: #34d399;">✅ Code Assessed as SAFE</div>
-            <div class="banner-desc">No security vulnerabilities or risky buffer patterns detected across static analysis engines.</div>
+            <div class="banner-desc">{detection['decision_reason']}</div>
         </div>
         """, unsafe_allow_html=True)
+        if validation["verdict"] == "FALSE_POSITIVE":
+            st.info(
+                f"CodeBERT initially flagged this source as vulnerable "
+                f"({cb_score}), but secondary validation rejected the finding. "
+                f"{validation['reason']}"
+            )
         st.stop()
+
+    elif detection["decision"] == "ML-SUSPECTED":
+        st.markdown(f"""
+        <div style="
+            background: #2a2110;
+            border: 1px solid #854d0e;
+            border-left: 4px solid #f59e0b;
+            border-radius: 6px;
+            padding: 16px;
+            margin-top: 1rem;
+            margin-bottom: 1.5rem;
+        ">
+            <div class="banner-title" style="color: #fbbf24;">🧠 ML-SUSPECTED</div>
+            <div class="banner-desc">{detection['decision_reason']}</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+        if validation["verdict"] == "UNAVAILABLE":
+            st.warning(
+                "Secondary validation is unavailable in this deployment. "
+                "No patch was generated because the ML-only suspicion could not be confirmed."
+            )
+        st.stop()
+
     else:
-        cwes_html = "".join([f'<span class="cwe-pill">{cwe}</span>' for cwe in detection['cwes']]) if detection['cwes'] else '<span class="cwe-pill">General Vulnerability</span>'
+        cwes_html = "".join(
+            [f'<span class="cwe-pill">{cwe}</span>' for cwe in detection["cwes"]]
+        ) if detection["cwes"] else '<span class="cwe-pill">Mapped security evidence</span>'
+
         st.markdown(f"""
         <div class="banner-vulnerable">
-            <div class="banner-title" style="color: #f87171;">⚠️ {detection['decision']} (Confidence: {detection['confidence']})</div>
-            <div class="banner-desc">Identified Weaknesses: {cwes_html}</div>
+            <div class="banner-title" style="color: #f87171;">🔴 {detection['decision']} (Confidence: {detection['confidence']})</div>
+            <div class="banner-desc">
+                {detection['decision_reason']}<br>
+                {cwes_html}
+            </div>
         </div>
         """, unsafe_allow_html=True)
 
     st.markdown("---")
 
-    # Stage 2+3 — Patch
-    with st.spinner("🦙 LLaMA 3.2 (3B) generating secure remediation patch..."):
-        prompt = build_prompt(code, detection['cwes'], detection['flawfinder'])
-        patch = patch_code(prompt)
+    # Stage 3 + 4 — Bounded iterative remediation loop.
+    # The LLM may refine a patch up to three times. Static analysis is the
+    # authority for deciding whether the identified CWE remains.
+    MAX_PATCH_ATTEMPTS = 3
+    patch = {
+        "available": False,
+        "patched_code": "",
+        "explanation": "",
+        "changes": "",
+        "full_response": "",
+        "error": "",
+    }
+    verification = {
+        "status": "SKIPPED",
+        "remaining_issues": [],
+        "remaining_cwes": detection["cwes"],
+        "feedback": "No patch was generated.",
+    }
+    remediation_attempts = []
 
-    # Stage 4 — Verify only when an actual patch was generated.
-    if patch.get('patched_code', '').strip():
-        with st.spinner("Running Cppcheck automated patch verification..."):
-            verification = verify_patch(patch['patched_code'], detection['cwes'])
-    else:
-        verification = {
-            "status": "SKIPPED",
-            "remaining_issues": []
-        }
+    base_prompt = build_prompt(code, detection["cwes"], detection["flawfinder"])
+    current_prompt = base_prompt
+
+    for attempt in range(1, MAX_PATCH_ATTEMPTS + 1):
+        with st.spinner(f"🦙 Generating remediation patch — attempt {attempt}/{MAX_PATCH_ATTEMPTS}..."):
+            candidate = patch_code(current_prompt)
+
+        patch = candidate
+
+        if not candidate.get("patched_code", "").strip():
+            verification = {
+                "status": "SKIPPED",
+                "remaining_issues": [],
+                "remaining_cwes": detection["cwes"],
+                "feedback": candidate.get(
+                    "explanation",
+                    "No patched source code was generated.",
+                ),
+            }
+            break
+
+        with st.spinner(f"🔍 Verifying patch — attempt {attempt}/{MAX_PATCH_ATTEMPTS}..."):
+            verification = verify_patch(
+                candidate["patched_code"],
+                detection["cwes"],
+            )
+
+        remediation_attempts.append({
+            "attempt": attempt,
+            "status": verification["status"],
+            "remaining_cwes": verification.get("remaining_cwes", []),
+            "remaining_issues": verification.get("remaining_issues", []),
+        })
+
+        if verification["status"] == "PASSED ✅":
+            break
+
+        if verification["status"] in ("UNAVAILABLE", "SKIPPED"):
+            break
+
+        if attempt < MAX_PATCH_ATTEMPTS:
+            current_prompt = f"""
+Refine the previous security patch. Do NOT redesign the program or introduce
+unrelated behavior. Preserve the original functionality and fix only the
+identified security weakness.
+
+ORIGINAL SOURCE:
+```c
+{code}
+```
+
+IDENTIFIED CWE(S):
+{', '.join(detection['cwes']) or 'Unknown'}
+
+PREVIOUS PATCH:
+```c
+{candidate['patched_code']}
+```
+
+STATIC VERIFICATION RESULT: FAILED
+Remaining CWE(s):
+{', '.join(verification.get('remaining_cwes', [])) or 'Unknown'}
+
+VERIFICATION FEEDBACK:
+{verification.get('feedback', '')}
+
+REMAINING STATIC FINDINGS:
+{chr(10).join(verification.get('remaining_issues', [])) or 'None listed'}
+
+Generate a corrected complete source file using the exact EXPLANATION,
+PATCHED CODE, and CHANGES response format.
+"""
+
+    if remediation_attempts and verification["status"] == "FAILED ❌" and len(remediation_attempts) >= MAX_PATCH_ATTEMPTS:
+        verification["status"] = "HUMAN_REVIEW"
+        verification["feedback"] = (
+            "Automatic remediation reached the maximum of three attempts. "
+            "Manual security review is required."
+        )
 
     # ─── Detailed Results Tabs ─────────────────────────────
+    if remediation_attempts:
+        st.markdown("#### 🔄 Remediation Attempts")
+        for item in remediation_attempts:
+            label = "PASSED" if "PASSED" in item["status"] else item["status"]
+            st.write(
+                f"Attempt {item['attempt']}/{MAX_PATCH_ATTEMPTS}: {label}"
+                + (f" — remaining CWE(s): {', '.join(item['remaining_cwes'])}" if item["remaining_cwes"] else "")
+            )
+        st.markdown("---")
+
     st.subheader("📋 Remediation & Verification Breakdown")
 
-    tab1, tab2, tab3 = st.tabs(["🔍 Vulnerability Explanation", "🔧 Patched Code & Changes", "✅ Verification Report"])
+    tab1, tab2, tab3 = st.tabs([
+        "🔍 Vulnerability Explanation",
+        "🔧 Patched Code & Changes",
+        "✅ Verification Report"
+    ])
 
     with tab1:
         st.markdown("#### Vulnerability Diagnosis")
-        # Show explanation; fallback to changes if missing
-        explanation_text = patch.get('explanation') or patch.get('changes')
+        explanation_text = patch.get("explanation") or patch.get("changes")
         if explanation_text:
             st.markdown(explanation_text)
         else:
             st.info("No detailed explanation returned by patcher.")
 
+        if validation["verdict"] == "CONFIRMED":
+            st.markdown("#### ML-Only Validation Evidence")
+            st.info(validation["reason"])
+            if validation["evidence"]:
+                st.code(validation["evidence"], language="text")
+
     with tab2:
         col_left, col_right = st.columns(2)
+
         with col_left:
             st.markdown("#### Original Code")
             st.code(code.strip(), language="c", line_numbers=True)
 
         with col_right:
             st.markdown("#### Secure Patched Code")
-            # Display only actual patched source code.
-            code_text = patch.get('patched_code', '').strip()
+            code_text = patch.get("patched_code", "").strip()
+
             if code_text:
-                clean_code = code_text.replace("```c", "").replace("```", "").strip()
+                clean_code = (
+                    code_text
+                    .replace("```c", "")
+                    .replace("```cpp", "")
+                    .replace("```", "")
+                    .strip()
+                )
                 st.code(clean_code, language="c", line_numbers=True)
             else:
                 st.warning(
-                    "AI patching is unavailable in this deployment. "
-                    "Run VulnScan locally with Ollama + Llama 3.2 3B to generate a secure patch."
+                    "AI patching was not completed because no patch was generated."
                 )
 
         st.markdown("---")
         st.markdown("#### Summary of Remediation Changes")
-        if patch['changes']:
-            st.markdown(patch['changes'])
+
+        if patch.get("changes"):
+            st.markdown(patch["changes"])
         else:
-            st.info(patch.get('full_response', 'No specific changes summary listed.'))
+            st.info(
+                patch.get(
+                    "full_response",
+                    "No specific changes summary listed."
+                )
+            )
 
     with tab3:
         st.markdown("#### Automated Verification Engine")
-        if verification['status'] == "SKIPPED":
+
+        if verification["status"] == "SKIPPED":
             st.markdown("""
             <div style="
                 background: #2a2110;
@@ -440,15 +635,35 @@ if analyze_clicked:
                 margin-bottom: 1rem;
             ">
                 ⏭️ Patch Verification SKIPPED — No patch was generated.
-                Ollama + Llama 3.2 3B is unavailable in the cloud demo.
             </div>
             """, unsafe_allow_html=True)
-        elif "PASSED" in verification['status']:
+
+        elif verification["status"] == "HUMAN_REVIEW":
+            st.markdown("""
+            <div style="
+                background: #2a2110;
+                border: 1px solid #854d0e;
+                border-left: 4px solid #f59e0b;
+                border-radius: 6px;
+                padding: 14px 18px;
+                color: #fde68a;
+                font-weight: 600;
+                margin-bottom: 1rem;
+            ">
+                ⚠️ AUTOMATIC REMEDIATION EXHAUSTED — Human security review required.
+            </div>
+            """, unsafe_allow_html=True)
+
+        elif verification["status"] == "UNAVAILABLE":
+            st.warning(verification.get("feedback", "Patch verification is unavailable."))
+
+        elif "PASSED" in verification["status"]:
             st.markdown("""
             <div class="verify-success">
                 ✅ Patch Verification PASSED — Identified CWE vulnerabilities resolved successfully.
             </div>
             """, unsafe_allow_html=True)
+
         else:
             st.markdown("""
             <div class="verify-fail">
@@ -456,14 +671,17 @@ if analyze_clicked:
             </div>
             """, unsafe_allow_html=True)
 
-        if verification['remaining_issues']:
+        if verification["remaining_issues"]:
             st.markdown("**Static Analysis Notes & Warnings:**")
-            for issue in verification['remaining_issues']:
+            for issue in verification["remaining_issues"]:
                 st.code(issue, language="text")
-        elif verification['status'] == "SKIPPED":
-            st.caption("Verification was not run because no patched source code was generated.")
+        elif verification["status"] in ("SKIPPED", "UNAVAILABLE"):
+            st.caption(verification.get("feedback", "Verification was not completed."))
+        elif verification["status"] == "HUMAN_REVIEW":
+            st.caption(verification.get("feedback", "Manual review is required."))
         else:
-            st.caption("No remaining warnings or issues reported by Cppcheck.")
+            st.caption("No remaining mapped security findings were reported by the verification stage.")
+
 
 # ─── Footer ────────────────────────────────────────────────
 st.markdown("""
